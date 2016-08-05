@@ -72,6 +72,7 @@ typedef struct {
 struct mtev_cluster_t {
   char *name;
   unsigned short port;
+  unsigned short data_port;
   int period;
   int timeout;
   int maturity;
@@ -485,6 +486,10 @@ mtev_cluster_update_config(mtev_cluster_t *cluster, mtev_boolean create) {
     xmlSetProp(parent, (xmlChar *)"name", (xmlChar *)cluster->name);
     snprintf(port, sizeof(port), "%d", cluster->port);
     xmlSetProp(parent, (xmlChar *)"port", (xmlChar *)port);
+    if(cluster->data_port > 0) {
+      snprintf(port, sizeof(port), "%d", cluster->data_port);
+      xmlSetProp(parent, (xmlChar *)"data_port", (xmlChar *)port);
+    }
     snprintf(period, sizeof(period), "%d", cluster->period);
     xmlSetProp(parent, (xmlChar *)"period", (xmlChar *)period);
     snprintf(timeout, sizeof(timeout), "%d", cluster->timeout);
@@ -517,6 +522,11 @@ mtev_cluster_update_config(mtev_cluster_t *cluster, mtev_boolean create) {
       snprintf(port, sizeof(port), "%d", ntohs(cluster->nodes[i].addr.addr6.sin6_port));
       xmlSetProp(node, (xmlChar *)"port", (xmlChar *)port);
     }
+    if(cluster->nodes[i].data_port > 0) {
+      snprintf(port, sizeof(port), "%d", cluster->nodes[i].data_port);
+      xmlSetProp(node, (xmlChar *)"data_port", (xmlChar *)port);
+    }
+
     xmlAddChild(parent, node);
   }
   if(container) xmlAddChild(container, parent);
@@ -532,7 +542,7 @@ mtev_cluster_update_config(mtev_cluster_t *cluster, mtev_boolean create) {
 
 int mtev_cluster_update_internal(mtev_conf_section_t cluster,
     mtev_boolean booted) {
-  int rv = -1, i, n_nodes, port, period, timeout, maturity;
+  int rv = -1, i, n_nodes, port, data_port, period, timeout, maturity;
   int64_t seq;
   char bufstr[1024];
   mtev_conf_section_t *nodes = NULL;
@@ -576,6 +586,17 @@ int mtev_cluster_update_internal(mtev_conf_section_t cluster,
     goto bail;
   }
 
+  if(!mtev_conf_get_stringbuf(cluster, "@data_port", bufstr, sizeof(bufstr)) ||
+     bufstr[0] == '\0') {
+    data_port = 0;
+  } else {
+    data_port = strtoll(bufstr, &endptr, 10);
+    if(*endptr || data_port <= 0 || data_port > 0xffff) {
+      mtevL(mtev_error, "Cluster '%s' data_port invalid.\n", name);
+      goto bail;
+    }
+  }
+
   if(!mtev_conf_get_stringbuf(cluster, "@period", bufstr, sizeof(bufstr)) ||
      bufstr[0] == '\0') {
      strlcpy(bufstr, "200", sizeof(bufstr));
@@ -612,7 +633,8 @@ int mtev_cluster_update_internal(mtev_conf_section_t cluster,
     nlist = mtev_memory_safe_calloc(n_nodes, sizeof(*nlist));
     for(i=0;i<n_nodes;i++) {
       int family;
-      int port;
+      int port, node_data_port;
+      node_data_port = 0;
       union {
         struct in_addr addr4;
         struct in6_addr addr6;
@@ -633,11 +655,18 @@ int mtev_cluster_update_internal(mtev_conf_section_t cluster,
         mtevL(mtev_error, "Cluster '%s' node %d has no (or bad) port\n", name, i);
         goto bail;
       }
+      if(data_port > 0
+          && (!mtev_conf_get_int(nodes[i], "@data_port", &node_data_port)
+              || node_data_port < 0 || node_data_port > 0xffff)) {
+        mtevL(mtev_error, "Cluster '%s' node %d has no (or bad) data_port\n",
+            name, i);
+        goto bail;
+      }
       if(!mtev_conf_get_stringbuf(nodes[i], "@address", bufstr, sizeof(bufstr))) {
         mtevL(mtev_error, "Cluster '%s' node %d has no address\n", name, i);
         goto bail;
       }
-      
+
       family = AF_INET;
       rv = inet_pton(family, bufstr, &a);
       if(rv != 1) {
@@ -661,6 +690,7 @@ int mtev_cluster_update_internal(mtev_conf_section_t cluster,
         nlist[i].addr.addr4.sin_port = htons((unsigned short)port);
         nlist[i].address_len = sizeof(nlist[i].addr.addr4);
       }
+      nlist[i].data_port = node_data_port;
     }
   }
 
@@ -669,6 +699,7 @@ int mtev_cluster_update_internal(mtev_conf_section_t cluster,
   new_cluster->key = key; key = NULL;
   new_cluster->config_seq = seq;
   new_cluster->port = port;
+  new_cluster->data_port = data_port;
   new_cluster->period = period;
   new_cluster->timeout = timeout;
   new_cluster->maturity = maturity;
@@ -901,6 +932,10 @@ mtev_cluster_to_xmlnode(mtev_cluster_t *c) {
   xmlSetProp(cluster, (xmlChar *)"seq", (xmlChar *)str);
   snprintf(port, sizeof(port), "%d", c->port);
   xmlSetProp(cluster, (xmlChar *)"port", (xmlChar *)port);
+  if(c->data_port > 0) {
+    snprintf(port, sizeof(port), "%d", c->data_port);
+    xmlSetProp(cluster, (xmlChar *)"data_port", (xmlChar *)port);
+  }
   snprintf(period, sizeof(period), "%d", c->period);
   xmlSetProp(cluster, (xmlChar *)"period", (xmlChar *)period);
   snprintf(timeout, sizeof(timeout), "%d", c->timeout);
@@ -943,6 +978,11 @@ mtev_cluster_to_xmlnode(mtev_cluster_t *c) {
       snprintf(port, sizeof(port), "%d", ntohs(n->addr.addr6.sin6_port));
       xmlSetProp(node, (xmlChar *)"port", (xmlChar *)port);
     }
+    if(n->data_port > 0) {
+      snprintf(port, sizeof(port), "%d", n->data_port);
+      xmlSetProp(node, (xmlChar *)"data_port", (xmlChar *)port);
+    }
+
     xmlAddChild(cluster, node);
   }
   return cluster;

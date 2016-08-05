@@ -48,6 +48,7 @@ typedef struct {
     struct sockaddr_in6 addr6;
   } addr;
   socklen_t address_len;
+  unsigned short data_port;
   struct timeval last_contact;
   struct timeval boot_time;
   u_int64_t config_seq;
