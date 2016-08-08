@@ -84,20 +84,27 @@ MTEV_HOOK_IMPL(mtev_cluster_messaging_received,
   (void *closure, eventer_t e, char *data, int data_len),
   (closure,e,data,data_len))
 
-static mtev_boolean
+static int
 read_next_message(eventer_t e, request_ctx_t *ctx) {
-  int read, bytes_expected, inbuff_offset;
+  int read, bytes_expected, inbuff_offset, mask;
   char* inbuff;
   bytes_expected = sizeof(msg_hdr_t);
+  if(ctx->read_so_far >= bytes_expected) {
+    bytes_expected = ctx->msg_hdr.length_including_header;
+  }
 
   inbuff = (char*)&ctx->msg_hdr;
   inbuff_offset = 0;
 
   while(1) {
-    read = e->opset->read(e->fd, inbuff + inbuff_offset, bytes_expected - ctx->read_so_far, &newmask, e);
-    if(read == 0 || (read < 0 && errno != EAGAIN)) {
+    read = e->opset->read(e->fd, inbuff + inbuff_offset, bytes_expected - ctx->read_so_far, &mask, e);
+    if(read == -1 && errno == EAGAIN) {
+      return mask;
+    }
+
+    if(read <= 0) {
       eventer_remove_fd(e->fd);
-      e->opset->close(e->fd, &newmask, e);
+      e->opset->close(e->fd, &mask, e);
       return 0;
     }
     if(read > 0) {
@@ -117,10 +124,8 @@ read_next_message(eventer_t e, request_ctx_t *ctx) {
         ctx->read_so_far = 0;
         free(ctx->payload);
         ctx->payload = NULL;
-        return mtev_true;
+        return 0;
       }
-    } else {
-      return mtev_false;
     }
   }
 }
@@ -145,11 +150,7 @@ on_msg_received(eventer_t e, int mask, void *closure,
     ac->service_ctx_free = request_ctx_free;
   }
 
-  if(read_next_message(e, ctx) == mtev_true) {
-    return 0;
-  }
-
-  return newmask | EVENTER_EXCEPTION;
+  return read_next_message(e, ctx);
 }
 
 
