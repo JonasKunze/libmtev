@@ -89,12 +89,13 @@ read_next_message(eventer_t e, request_ctx_t *ctx) {
   int read, bytes_expected, inbuff_offset, mask;
   char* inbuff;
   bytes_expected = sizeof(msg_hdr_t);
+  inbuff_offset = ctx->read_so_far;
+  inbuff = (char*)&ctx->msg_hdr;
   if(ctx->read_so_far >= bytes_expected) {
     bytes_expected = ctx->msg_hdr.length_including_header;
+    inbuff_offset -= sizeof(msg_hdr_t);
+    inbuff = ctx->payload;
   }
-
-  inbuff = (char*)&ctx->msg_hdr;
-  inbuff_offset = 0;
 
   while(1) {
     read = e->opset->read(e->fd, inbuff + inbuff_offset, bytes_expected - ctx->read_so_far, &mask, e);
