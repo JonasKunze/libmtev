@@ -138,7 +138,7 @@ keep_reading(eventer_t e, int mask, void *closure,
         free(response->payload);
         response->payload = NULL;
 
-        return 0;
+        return EVENTER_READ | EVENTER_WRITE | EVENTER_EXCEPTION;
       }
     }
   }
@@ -151,7 +151,7 @@ read_next_message(eventer_t e, mtev_cluster_messaging_response_func_t callback) 
 
   e->closure = ctx;
   e->callback = keep_reading;
-  return 1;
+  return e->mask;
 }
 
 static int
@@ -164,36 +164,11 @@ on_connection_established(eventer_t e, int mask, void *closure,
     return 0;
   }
 
-
   return read_next_message(e, mtev_cluster_messaging_received_hook_invoke);
 }
 
-
-
 static int
-mtev_cluster_messaging_receive(eventer_t e, int mask, void *closure,
-    struct timeval *now) {
-//  char *msg;
-//  int msg_len;
-//  int rv;
-//  request_ctx_t *job = closure;
-//
-//  rv = read_next_message(e, ctx, &msg, &msg_len);
-//  if(rv == 0) {
-//    mtev_cluster_messaging_received_hook_invoke(e, msg, msg_len);
-//  }
-//
-//  if(msg)
-//    free(msg);
-//
-//  return rv;
-//
-//  mtev_cluster_close_connection(e);
-  return 0;
-}
-
-static int
-mtev_cluster_send(eventer_t e, int mask, void *closure,
+mtev_cluster_messaging_send(eventer_t e, int mask, void *closure,
     struct timeval *now) {
   int rv;
   int write_mask = EVENTER_EXCEPTION;
@@ -217,12 +192,35 @@ mtev_cluster_send(eventer_t e, int mask, void *closure,
     request->data_free(request->outbuff);
   }
 
-  e->callback = mtev_cluster_messaging_receive;
-  return 1;
+  return read_next_message(e, ctx->response_callback);
+}
+
+static int
+mtev_cluster_messaging_start_sending(eventer_t e, char *data,
+    uint data_len, data_free_fn *data_free, mtev_cluster_messaging_response_func_t response_callback) {
+  connection_ctx_t *ctx = e->closure;
+
+  if(ctx == NULL) {
+    ctx = malloc(sizeof(connection_ctx_t));
+  }
+
+  assert(ctx->request.outbuff == NULL);
+
+  ctx->request.outbuff = data;
+  ctx->request.send_size = data_len;
+  ctx->request.data_free = data_free;
+  if(response_callback)
+    ctx->response_callback = response_callback;
+
+
+  e->callback = mtev_cluster_messaging_send;
+  e->closure = ctx;
+
+  return e->mask;
 }
 
 int
-mtev_cluster_messaging_request(const mtev_cluster_node_t *node, char *data,
+mtev_cluster_messaging_send_request(const mtev_cluster_node_t *node, char *data,
     uint data_len, data_free_fn *data_free, mtev_cluster_messaging_response_func_t response_callback) {
   int fd, rv;
   eventer_t e;
@@ -236,22 +234,20 @@ mtev_cluster_messaging_request(const mtev_cluster_node_t *node, char *data,
   rv = connect(fd, (struct sockaddr*)&addr, node->address_len);
   if(rv == -1) return -1;
 
-  connection_ctx_t *job = malloc(sizeof(connection_ctx_t));
-  job->node = *node;
-  job->request.outbuff = data;
-  job->request.send_size = data_len;
-  job->request.data_free = data_free;
-  job->response_callback = response_callback;
-
-  /* Register a handler for connection completion */
   e = eventer_alloc();
-  e->fd = fd;
   e->mask = EVENTER_READ | EVENTER_WRITE | EVENTER_EXCEPTION;
-  e->callback = mtev_cluster_send;
-  e->closure = job;
+  e->fd = fd;
   eventer_add(e);
 
+  mtev_cluster_messaging_start_sending(e, data, data_len, data_free, response_callback);
+
   return 1;
+}
+
+int
+mtev_cluster_messaging_send_response(eventer_t e, char *data,
+    uint data_len, data_free_fn *data_free) {
+  return mtev_cluster_messaging_start_sending(e, data, data_len, data_free, NULL);
 }
 
 void
