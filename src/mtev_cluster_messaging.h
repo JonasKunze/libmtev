@@ -35,15 +35,20 @@
 
 typedef void (data_free_fn) (void *data);
 
+typedef mtev_hook_return_t (*mtev_cluster_messaging_response_func_t)
+            (eventer_t e, const char *data, uint data_len);
+
 API_EXPORT(void)
   mtev_cluster_messaging_init();
 
 API_EXPORT(int)
-  mtev_cluster_messaging_send(const mtev_cluster_node_t *node, char *data, uint data_len, data_free_fn *data_free);
+mtev_cluster_messaging_request(const mtev_cluster_node_t *node, char *data,
+    uint data_len, data_free_fn *data_free,
+    mtev_cluster_messaging_response_func_t response_callback);
 
 MTEV_HOOK_PROTO(mtev_cluster_messaging_received,
-                (eventer_t e, char *data, int data_len),
+                (eventer_t e, const char *data, uint data_len),
                 void *, closure,
-                (void *closure, eventer_t e, char *data, int data_len));
+                (void *closure, eventer_t e, const char *data, uint data_len));
 
 #endif
