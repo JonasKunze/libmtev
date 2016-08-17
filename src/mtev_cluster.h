@@ -239,5 +239,7 @@ MTEV_HOOK_PROTO(mtev_cluster_handle_node_update,
                 (void *closure, mtev_cluster_node_changes_t node_changes, mtev_cluster_node_t *updated_node, mtev_cluster_t *cluster,
                     struct timeval old_boot_time));
 
+API_EXPORT(int)
+  mtev_cluster_get_data_port(mtev_cluster_t *cluster);
 
 #endif

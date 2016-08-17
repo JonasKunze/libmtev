@@ -216,12 +216,11 @@ mtev_cluster_messaging_start_sending(eventer_t e, char *data,
   e->callback = mtev_cluster_messaging_send;
   e->closure = ctx;
 
-  return e->mask;
+  return 1;
 }
 
-int
-mtev_cluster_messaging_send_request(const mtev_cluster_node_t *node, char *data,
-    uint data_len, data_free_fn *data_free, mtev_cluster_messaging_response_func_t response_callback) {
+eventer_t
+mtev_cluster_messaging_connect(const mtev_cluster_node_t *node) {
   int fd, rv;
   eventer_t e;
   union {
@@ -232,16 +231,22 @@ mtev_cluster_messaging_send_request(const mtev_cluster_node_t *node, char *data,
   addr.addr4.sin_port = htons(node->data_port);
   fd = socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
   rv = connect(fd, (struct sockaddr*)&addr, node->address_len);
-  if(rv == -1) return -1;
+  if(rv == -1) return NULL;
 
   e = eventer_alloc();
   e->mask = EVENTER_READ | EVENTER_WRITE | EVENTER_EXCEPTION;
   e->fd = fd;
   eventer_add(e);
 
-  mtev_cluster_messaging_start_sending(e, data, data_len, data_free, response_callback);
+  return e;
+}
 
-  return 1;
+int
+mtev_cluster_messaging_send_request(eventer_t connection, char *data,
+  uint data_len, data_free_fn *data_free,
+  mtev_cluster_messaging_response_func_t response_callback) {
+
+  return mtev_cluster_messaging_start_sending(connection, data, data_len, data_free, response_callback);
 }
 
 int
@@ -261,7 +266,7 @@ mtev_cluster_messaging_init(char* cluster_name) {
       exit(1);
     }
     eventer_name_callback("noit_cluster_network", on_connection_established);
-    //mtev_listener("*", 43291, SOCK_STREAM, 5, NULL, NULL, on_connection_established, NULL);
+    mtev_listener("*", mtev_cluster_get_data_port(cluster), SOCK_STREAM, 5, NULL, NULL, on_connection_established, NULL);
   } else {
     mtevL(mtev_notice, "Didn't find any cluster in the config files\n");
   }

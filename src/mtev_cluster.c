@@ -1123,3 +1123,8 @@ struct timeval
 mtev_cluster_get_my_boot_time() {
   return my_boot_time;
 }
+
+int
+mtev_cluster_get_data_port(mtev_cluster_t *cluster) {
+  return cluster->data_port;
+}
