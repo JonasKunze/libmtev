@@ -222,6 +222,7 @@ mtev_cluster_messaging_start_sending(eventer_t e, char *data,
 
   ctx->request.outbuff = data;
   ctx->request.send_size = data_len;
+  ctx->request.write_sofar = 0;
   ctx->request.data_free = data_free;
   ctx->closure = closure;
   if(response_callback)
