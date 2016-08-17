@@ -86,12 +86,37 @@ MTEV_HOOK_IMPL(mtev_cluster_messaging_request,
   (void *closure, eventer_t e, const char *data, uint data_len),
   (closure,e,data,data_len))
 
-static void
-mtev_cluster_close_connection(eventer_t e) {
+eventer_t
+mtev_cluster_messaging_connect(const mtev_cluster_node_t *node) {
+  int fd, rv;
+  eventer_t e;
+  union {
+    struct sockaddr_in addr4;
+    struct sockaddr_in6 addr6;
+  } addr;
+  addr.addr6 = node->addr.addr6;
+  addr.addr4.sin_port = htons(node->data_port);
+  fd = socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
+  rv = connect(fd, (struct sockaddr*)&addr, node->address_len);
+  if(rv == -1) return NULL;
+
+  e = eventer_alloc();
+  e->mask = EVENTER_READ | EVENTER_WRITE | EVENTER_EXCEPTION;
+  e->fd = fd;
+  eventer_add(e);
+
+  return e;
+}
+
+void
+mtev_cluster_messaging_disconnect(eventer_t connection) {
   int mask;
-  eventer_remove_fd(e->fd);
-  e->opset->close(e->fd, &mask, e);
-  eventer_free(e);
+  if(connection->closure) {
+    free(connection->closure);
+  }
+  eventer_remove_fd(connection->fd);
+  connection->opset->close(connection->fd, &mask, connection);
+  eventer_free(connection);
 }
 
 static int
@@ -118,7 +143,7 @@ keep_reading(eventer_t e, int mask, void *closure,
     }
 
     if(read <= 0) {
-      mtev_cluster_close_connection(e);
+      mtev_cluster_messaging_disconnect(e);
       return 0;
     }
     if(read > 0) {
@@ -228,32 +253,9 @@ mtev_cluster_messaging_start_sending(eventer_t e, char *data,
   if(response_callback)
     ctx->response_callback = response_callback;
 
-
   e->callback = mtev_cluster_messaging_send;
 
   return 1;
-}
-
-eventer_t
-mtev_cluster_messaging_connect(const mtev_cluster_node_t *node) {
-  int fd, rv;
-  eventer_t e;
-  union {
-    struct sockaddr_in addr4;
-    struct sockaddr_in6 addr6;
-  } addr;
-  addr.addr6 = node->addr.addr6;
-  addr.addr4.sin_port = htons(node->data_port);
-  fd = socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
-  rv = connect(fd, (struct sockaddr*)&addr, node->address_len);
-  if(rv == -1) return NULL;
-
-  e = eventer_alloc();
-  e->mask = EVENTER_READ | EVENTER_WRITE | EVENTER_EXCEPTION;
-  e->fd = fd;
-  eventer_add(e);
-
-  return e;
 }
 
 int

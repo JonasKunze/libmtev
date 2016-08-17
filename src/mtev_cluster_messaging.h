@@ -44,6 +44,9 @@ API_EXPORT(void)
 API_EXPORT(eventer_t)
   mtev_cluster_messaging_connect(const mtev_cluster_node_t *node);
 
+API_EXPORT(void)
+  mtev_cluster_messaging_disconnect(eventer_t connection);
+
 API_EXPORT(int)
   mtev_cluster_messaging_send_request(eventer_t connection, char *data,
     uint data_len, data_free_fn *data_free,
