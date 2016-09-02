@@ -36,7 +36,7 @@
 typedef void (data_free_fn) (void *data);
 
 typedef mtev_hook_return_t (*mtev_cluster_messaging_received_func_t)
-            (void *closure, eventer_t e, const char *data, uint data_len);
+            (void *closure, eventer_t e, const void *data, uint data_len);
 
 API_EXPORT(void)
   mtev_cluster_messaging_init();

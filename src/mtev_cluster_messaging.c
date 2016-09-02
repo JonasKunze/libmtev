@@ -184,7 +184,7 @@ read_next_message(eventer_t e, mtev_cluster_messaging_received_func_t callback) 
 }
 
 static mtev_hook_return_t
-on_request_received(void *closure, eventer_t e, const char *data, uint data_len) {
+on_request_received(void *closure, eventer_t e, const void *data, uint data_len) {
   return mtev_cluster_messaging_request_hook_invoke(e, data, data_len);
 }
 
