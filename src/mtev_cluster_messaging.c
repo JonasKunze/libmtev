@@ -50,7 +50,7 @@ typedef struct {
 typedef struct {
   msg_hdr_t msg_hdr;
   char *payload;
-  uint8_t read_so_far;
+  uint32_t read_so_far;
 } response_ctx_t;
 
 typedef struct {
