@@ -174,7 +174,7 @@ static int
 read_next_message(eventer_t e, mtev_cluster_messaging_received_func_t callback) {
   connection_ctx_t *ctx = e->closure;
   if(ctx == NULL) {
-    ctx = malloc(sizeof(connection_ctx_t));
+    ctx = calloc(1, sizeof(connection_ctx_t));
     e->closure = ctx;
   }
   ctx->response_callback = callback;
