@@ -139,7 +139,6 @@ keep_reading(eventer_t e, int mask, void *closure,
   }
 
   while(1) {
-      mtevL(mtev_error, "Reading!!!%d\n", bytes_expected - response->read_so_far);
     read = e->opset->read(e->fd, inbuff + inbuff_offset, bytes_expected - response->read_so_far, &mask, e);
     if(read == -1 && errno == EAGAIN) {
       return mask;
