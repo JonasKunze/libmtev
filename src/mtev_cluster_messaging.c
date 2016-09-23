@@ -34,7 +34,8 @@
 
 #include <errno.h>
 
-static int newmask = EVENTER_READ | EVENTER_EXCEPTION;
+static int
+async_read_next_message(eventer_t e, mtev_cluster_messaging_received_func_t callback);
 
 typedef struct {
   uint32_t length_including_header;
@@ -126,6 +127,7 @@ keep_reading(eventer_t e, int mask, void *closure,
   char* inbuff;
   connection_ctx_t *ctx = closure;
   response_ctx_t *response = &ctx->response;
+  mtev_hook_return_t callback_result;
 
   bytes_expected = sizeof(msg_hdr_t);
   inbuff_offset = response->read_so_far;
@@ -137,6 +139,7 @@ keep_reading(eventer_t e, int mask, void *closure,
   }
 
   while(1) {
+      mtevL(mtev_error, "Reading!!!%d\n", bytes_expected - response->read_so_far);
     read = e->opset->read(e->fd, inbuff + inbuff_offset, bytes_expected - response->read_so_far, &mask, e);
     if(read == -1 && errno == EAGAIN) {
       return mask;
@@ -158,20 +161,28 @@ keep_reading(eventer_t e, int mask, void *closure,
         inbuff_offset = 0;
       } else if(response->read_so_far == bytes_expected) {
         // message is complete
-        ctx->response_callback(ctx->closure, e, response->payload, response->msg_hdr.length_including_header - sizeof(msg_hdr_t));
+
+        // in case the callback doesn't touch the eventer -> read next message afterwards
+        async_read_next_message(e, ctx->response_callback);
+
+        callback_result = ctx->response_callback(ctx->closure, e, response->payload, response->msg_hdr.length_including_header - sizeof(msg_hdr_t));
 
         response->read_so_far = 0;
         free(response->payload);
         response->payload = NULL;
 
-        return EVENTER_READ | EVENTER_WRITE | EVENTER_EXCEPTION;
+        if(callback_result == MTEV_HOOK_CONTINUE) {
+          return e->mask;
+        }
+
+        return EVENTER_CANCEL;
       }
     }
   }
 }
 
 static int
-read_next_message(eventer_t e, mtev_cluster_messaging_received_func_t callback) {
+async_read_next_message(eventer_t e, mtev_cluster_messaging_received_func_t callback) {
   connection_ctx_t *ctx = e->closure;
   if(ctx == NULL) {
     ctx = calloc(1, sizeof(connection_ctx_t));
@@ -179,6 +190,7 @@ read_next_message(eventer_t e, mtev_cluster_messaging_received_func_t callback) 
   }
   ctx->response_callback = callback;
 
+  e->mask = EVENTER_READ | EVENTER_EXCEPTION;
   e->callback = keep_reading;
   return e->mask;
 }
@@ -194,14 +206,15 @@ on_connection_established(eventer_t e, int mask, void *closure,
   if(mask & EVENTER_EXCEPTION) {
     /* This removes the log feed which is important to do before calling close */
     eventer_remove_fd(e->fd);
-    e->opset->close(e->fd, &newmask, e);
+
+    e->opset->close(e->fd, &mask, e);
     return 0;
   }
 
   free(e->closure);
   e->closure = NULL;
 
-  return read_next_message(e, on_request_received);
+  return async_read_next_message(e, on_request_received);
 }
 
 static int
@@ -230,7 +243,7 @@ mtev_cluster_messaging_send(eventer_t e, int mask, void *closure,
   }
   request->outbuff = NULL;
 
-  return read_next_message(e, ctx->response_callback);
+  return async_read_next_message(e, ctx->response_callback);
 }
 
 static int
