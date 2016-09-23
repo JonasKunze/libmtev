@@ -161,10 +161,6 @@ keep_reading(eventer_t e, int mask, void *closure,
         inbuff_offset = 0;
       } else if(response->read_so_far == bytes_expected) {
         // message is complete
-
-        // in case the callback doesn't touch the eventer -> read next message afterwards
-        async_read_next_message(e, ctx->response_callback);
-
         callback_result = ctx->response_callback(ctx->closure, e, response->payload, response->msg_hdr.length_including_header - sizeof(msg_hdr_t));
 
         response->read_so_far = 0;
@@ -256,13 +252,14 @@ mtev_cluster_messaging_start_sending(eventer_t e, char *data,
     e->closure = ctx;
   }
 
-  assert(ctx->request.outbuff == NULL);
+  assert(ctx->request.outbuff == NULL && "Trying to send via a connection that's still active. Please remember that send/receive are in lockstep");
 
   ctx->request.outbuff = data;
   ctx->request.send_size = data_len;
   ctx->request.write_sofar = 0;
   ctx->request.data_free = data_free;
   ctx->closure = closure;
+  e->mask = EVENTER_WRITE | EVENTER_EXCEPTION;
   if(response_callback)
     ctx->response_callback = response_callback;
 
@@ -275,7 +272,6 @@ int
 mtev_cluster_messaging_send_request(eventer_t connection, char *data,
   uint data_len, data_free_fn *data_free,
   mtev_cluster_messaging_received_func_t response_callback, void* closure) {
-
   return mtev_cluster_messaging_start_sending(connection, data, data_len, data_free, response_callback, closure);
 }
 
