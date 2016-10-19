@@ -92,15 +92,13 @@ void
 mtev_prepend_str(mtev_prependable_str_buff_t *buff, const char* str,
     uint str_len) {
   if (buff->string - buff->buff < str_len) {
-    int bytes_stored = buff->buff_len - (buff->string - buff->buff);
+    int bytes_stored = mtev_prepend_strlen(buff);
     int new_buff_len = GROWTH_FACTOR(buff->buff_len + str_len);
-    char* tmp = calloc(1, new_buff_len + 1);
-    buff->buff_len = new_buff_len;
-    memcpy(tmp + buff->buff_len - bytes_stored, buff->string, bytes_stored);
-    tmp[buff->buff_len] = '\0';
+    mtev_prependable_str_buff_t *new_buff = mtev_prepend_str_alloc_sized(new_buff_len);
+    mtev_prepend_str(new_buff, buff->string, bytes_stored);
+
     free(buff->buff);
-    buff->buff = tmp;
-    buff->string = buff->buff + buff->buff_len - bytes_stored;
+    *buff = *new_buff;
   }
 
   buff->string -= str_len;
