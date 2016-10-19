@@ -112,9 +112,9 @@ mtev_prepend_str_alloc_sized(u_int initial_len) {
   mtev_prependable_str_buff_t* buff = calloc(1, sizeof(mtev_prependable_str_buff_t));
 
   buff->buff_len = initial_len;
-  buff->buff = calloc(1, buff->buff_len+1);
+  buff->buff = malloc(buff->buff_len+1);
+  buff->buff[buff->buff_len] = '\0';
   buff->string = buff->buff + buff->buff_len;
-  buff->string[buff->buff_len] = '\0';
   return buff;
 }
 
